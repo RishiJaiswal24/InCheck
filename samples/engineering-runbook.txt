@@ -1,0 +1,11 @@
+Platform Engineering Runbook — Staging Deployment
+
+Purpose: This runbook describes how to deploy the telemetry service to the staging environment and how to roll back if health checks fail.
+
+Deployment credentials (staging only, rotate quarterly):
+AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+deploy_password = Tr0ub4dor&3-staging-xyz
+
+Steps: 1) Authenticate to the staging account using the credentials above. 2) Run the deploy pipeline and wait for health checks to pass. 3) If error rates exceed two percent for five minutes, roll back using the previous release tag. 4) Post a summary in the platform channel.
+
+Contacts: The on-call engineer rotates weekly. Escalate to the engineering manager if the rollback does not restore service within thirty minutes.
