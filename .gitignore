@@ -12,12 +12,6 @@ build/
 .env.*
 !.env.example
 
-# Local databases and database sidecars
-data/*.db
-data/*.db-*
-data/*.sqlite
-data/*.sqlite-*
-
 # Logs
 *.log
 npm-debug.log*

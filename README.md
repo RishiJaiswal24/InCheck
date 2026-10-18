@@ -2,7 +2,7 @@
 
 Scan documents for prompt injection / secrets / exfiltration, then watch an AI agent try to be tricked by them — and get stopped by a server-side policy gateway.
 
-**Stack:** Next.js 15 App Router · JavaScript only · Tailwind CSS · libSQL (`@libsql/client`: local SQLite file in dev, Turso in production) · `@google/genai` · `pdf-parse`.
+**Stack:** Next.js 15 App Router · JavaScript only · Tailwind CSS · MongoDB (official `mongodb` driver: local mongod in dev, Atlas in production) · `@google/genai` · `pdf-parse`.
 
 ## Setup
 
@@ -15,7 +15,7 @@ npm test                       # 27 tests, no network or API key needed
 
 Open the app → **Dashboard → Load sample documents** → **Documents** → scan → **Attack Playground → Run all**.
 
-Requires Node 20+ (tested on Node 22). Locally the database is a SQLite file in `data/` (git-ignored).
+Requires Node 20+ (tested on Node 22). Locally you need a MongoDB server on `mongodb://127.0.0.1:27017` (or set `MONGODB_URI`). Collections and indexes are created automatically on first request.
 
 ## What happens during a scan
 
@@ -49,24 +49,24 @@ The built-in agent planner is intentionally **over-compliant** (it obeys instruc
 
 ## Gemini cost protection
 
-`GEMINI_API_KEY` is read only server-side (`.env.local` / Vercel env vars). The daily cap (`GEMINI_DAILY_LIMIT`, default 20, UTC day) is enforced by reserving a slot *before* each call in a single atomic SQL statement, so concurrent serverless instances cannot overshoot it (failed calls count). Also: per-request input-token cap, output cap, cache, per-document batch cap, one scan per document at a time (DB-backed lock), usage table surfaced on the dashboard. The model is configurable via `GEMINI_MODEL` (default `gemini-2.5-flash`).
+`GEMINI_API_KEY` is read only server-side (`.env.local` / Vercel env vars). The daily cap (`GEMINI_DAILY_LIMIT`, default 20, UTC day) is enforced by reserving a slot *before* each call in a single atomic conditional upsert on a per-day counter document, so concurrent serverless instances cannot overshoot it (failed calls count). Also: per-request input-token cap, output cap, cache, per-document batch cap, one scan per document at a time (DB-backed lock), usage table surfaced on the dashboard. The model is configurable via `GEMINI_MODEL` (default `gemini-2.5-flash`).
 
 ## Deploying to Vercel
 
-SQLite files **cannot** persist on Vercel (read-only, per-instance filesystem), so production uses a hosted libSQL database.
+Vercel's filesystem is read-only and per-instance, so production needs a hosted database: **MongoDB Atlas**.
 
-1. **Create a Turso database** (free tier is plenty): `turso db create incheck`, then `turso db show incheck --url` and `turso db tokens create incheck`. (Or add Turso from the Vercel Marketplace, which injects these variables for you.) Tables are created automatically on first request.
+1. **Create an Atlas cluster** (the free M0 tier is plenty), add a database user, and allow network access from Vercel (`0.0.0.0/0`, or use the Vercel Marketplace integration which sets this up and injects `MONGODB_URI`). Copy the connection string. Collections and indexes are created automatically on first request.
 2. **Import the repo in Vercel** (framework: Next.js, Node 20+). No build settings to change.
 3. **Set environment variables** (Project → Settings → Environment Variables):
 
 | Variable | Notes |
 |---|---|
-| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | **Required** for persistence. Without them the app runs on temporary `/tmp` storage and shows a warning banner. |
+| `MONGODB_URI`, `MONGODB_DB` | **Required** on Vercel (`MONGODB_DB` defaults to `incheck`). Without a URI the API returns errors and the dashboard shows a warning banner. |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Optional; without a key every scan is `partial` (local detection only). |
 | `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD` | **Strongly recommended.** The app has no user accounts; anyone with the URL can use your Gemini budget and see the shared data. |
 | `GEMINI_DAILY_LIMIT` etc. | See `.env.example`. |
 
-4. Deploy, then open `/api/health` — it should return `"db":"ok","persistence":"turso"`.
+4. Deploy, then open `/api/health` — it should return `"db":"ok","persistence":"mongodb"`.
 
 Production behaviour worth knowing:
 
@@ -79,7 +79,7 @@ Production behaviour worth knowing:
 ## Layout
 
 ```
-lib/  config · db(libSQL) · ratelimit(in http) · documents · retrieval(BM25) · detection · budget · gemini · orchestrator · policy · tools · agent · scenarios · samples · audit · stats
+lib/  config · db(MongoDB) · ratelimit(in http) · documents · retrieval(BM25) · detection · budget · gemini · orchestrator · policy · tools · agent · scenarios · samples · audit · stats
 app/api/…  documents, documents/[id]/scan, samples, agent/run, agent/tool, scenarios, stats, audit
 components/  Dashboard · DocumentsPanel · SandboxPanel · PlaygroundPanel · AuditPanel · AgentRunView
 samples/  7 test documents (clean, poisoned, credentials, training, ambiguous, 3.5k-word handbook, PDF)
@@ -100,4 +100,13 @@ tests/    policy · orchestrator · documents   (node:test)
 - Gemini calls are covered by tests with a fake client; the live API path was not exercised in the build environment (no network to Google). First thing to do with a real key: scan `ambiguous-meeting-notes.txt`.
 - `pdf-parse` (pdf.js 1.x) handles typical text PDFs; scanned/image PDFs have no OCR and are rejected. The parser retries once because the first parse in a process can fail.
 - Local rules are English-centric regexes; they are a fast first line, not a complete classifier.
-- Single-process app (in-memory scan lock, one SQLite file) – fine for a demo, not for horizontal scale.
+- Single-process app (in-memory scan lock, one MongoDB database) – fine for a demo, not for horizontal scale.
+
+## Migrating from the old SQLite/Turso storage
+
+Existing data can be copied over once with `scripts/migrate-sqlite-to-mongo.mjs` (ids are preserved): `npm i --no-save @libsql/client`, then
+`SQLITE_URL=file:data/incheck.db MONGODB_URI=... npm run db:migrate-sqlite`. Skip this if you are happy to start fresh.
+
+## Tests
+
+`npm test` starts a throwaway in-memory MongoDB (`mongodb-memory-server`, downloads a mongod binary on first run). To use your own server instead, set `TEST_MONGODB_URI`; each test file creates its own uniquely named database.

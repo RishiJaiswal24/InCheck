@@ -1,16 +1,13 @@
-import { q, reapStaleScans } from '@/lib/db';
+import { reapStaleScans } from '@/lib/db';
 import { getConfig } from '@/lib/config';
-import { ingestDocument } from '@/lib/documents';
+import { ingestDocument, listDocuments } from '@/lib/documents';
 import { bad, handle, json, rateLimit } from '@/lib/http';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export const GET = handle(async () => {
   await reapStaleScans();
-  return json({ documents: await q.all(
-    `SELECT d.*, s.id scan_id, s.status scan_status, s.processed_batches, s.planned_batches, s.skipped_batches,
-     (SELECT COUNT(*) FROM findings f WHERE f.doc_id=d.id) finding_count
-     FROM documents d LEFT JOIN scans s ON s.id=(SELECT MAX(id) FROM scans WHERE doc_id=d.id) ORDER BY d.id DESC`) });
+  return json({ documents: await listDocuments() });
 });
 
 export const POST = handle(async (req) => {

@@ -1,7 +1,7 @@
 import './setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { q } from '../lib/db.js';
+import { db } from '../lib/db.js';
 import { getConfig } from '../lib/config.js';
 import { reserve } from '../lib/budget.js';
 import { ingestDocument, deleteDocument, getChunks } from '../lib/documents.js';
@@ -39,12 +39,12 @@ test('time budget stops new Gemini requests, reports partial, and a re-scan resu
 
 test('scan lock is DB-backed; stale running scans are reaped as partial (never safe)', async () => {
   const d = await doc(32, 300);
-  const id = (await q.run("INSERT INTO scans(doc_id,status) VALUES(?, 'running')", [d.id])).id;
+  const id = (await db.insert('scans', { doc_id: d.id, status: 'running' })).id;
   await assert.rejects(() => scanDocument(d.id, { client: null }), (e) => e.status === 409);
-  await q.run("UPDATE scans SET started_at=datetime('now','-10 minutes') WHERE id=?", [id]);
+  await db.updateOne('scans', { _id: id }, { started_at: new Date(Date.now() - 10 * 60 * 1000).toISOString() });
   const r = await scanDocument(d.id, { client: null });
   assert.equal(r.status, 'partial');
-  assert.equal((await q.get('SELECT status, stop_reason FROM scans WHERE id=?', [id])).stop_reason, 'interrupted');
+  assert.equal((await db.get('scans', { _id: id })).stop_reason, 'interrupted');
 });
 
 test('rate limiter blocks after the limit with 429', async () => {
@@ -60,19 +60,19 @@ test('deleting a document removes its chunks and findings', async () => {
   await scanDocument(d.id, { client: null });
   assert.ok((await getChunks(d.id)).length > 0);
   await deleteDocument(d.id);
-  assert.equal((await q.get('SELECT COUNT(*) n FROM chunks WHERE doc_id=?', [d.id])).n, 0);
-  assert.equal((await q.get('SELECT COUNT(*) n FROM findings WHERE doc_id=?', [d.id])).n, 0);
+  assert.equal(await db.count('chunks', { doc_id: d.id }), 0);
+  assert.equal(await db.count('findings', { doc_id: d.id }), 0);
 });
 
-test('storage mode: Turso when configured, ephemeral /tmp on Vercel without it, local file otherwise', () => {
+test('storage mode: MONGODB_URI when set, local mongod in dev, unconfigured on Vercel without it', () => {
   const keep = { ...process.env };
   try {
-    process.env.SENTINEL_DB = 'data/x.db';
-    assert.equal(getConfig().persistence, 'local-file');
+    delete process.env.MONGODB_URI; delete process.env.VERCEL;
+    assert.deepEqual([getConfig().persistence, getConfig().mongoUri], ['local-mongodb', 'mongodb://127.0.0.1:27017']);
     process.env.VERCEL = '1';
-    assert.deepEqual([getConfig().persistence, getConfig().dbUrl], ['ephemeral', 'file:/tmp/incheck.db']);
-    process.env.TURSO_DATABASE_URL = 'libsql://example.turso.io'; process.env.TURSO_AUTH_TOKEN = 'tok';
-    assert.deepEqual([getConfig().persistence, getConfig().dbUrl, getConfig().dbAuthToken], ['turso', 'libsql://example.turso.io', 'tok']);
+    assert.deepEqual([getConfig().persistence, getConfig().mongoUri], ['unconfigured', '']);
+    process.env.MONGODB_URI = 'mongodb+srv://u:p@cluster.example.mongodb.net'; process.env.MONGODB_DB = 'prod';
+    assert.deepEqual([getConfig().persistence, getConfig().mongoUri, getConfig().mongoDb], ['mongodb', 'mongodb+srv://u:p@cluster.example.mongodb.net', 'prod']);
   } finally { process.env = keep; }
 });
 

@@ -2,7 +2,7 @@
 const nextConfig = {
   poweredByHeader: false,
   // Native / CJS-heavy packages must not be bundled.
-  serverExternalPackages: ['pdf-parse', '@libsql/client', 'libsql'],
+  serverExternalPackages: ['pdf-parse', 'mongodb'],
   // Sample documents are read from disk at runtime; make sure Vercel ships them with the functions that use them.
   outputFileTracingIncludes: {
     '/api/samples': ['./samples/**/*'],

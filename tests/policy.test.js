@@ -2,7 +2,7 @@ import './setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateToolCall, executeToolCall } from '../lib/policy.js';
-import { q } from '../lib/db.js';
+import { db } from '../lib/db.js';
 import { runAgent } from '../lib/agent.js';
 import { resolveScenario } from '../lib/scenarios.js';
 
@@ -46,7 +46,7 @@ test('denied calls never reach the tool implementation and are audited', async (
   const r2 = await executeToolCall({ tool: 'send_email', args: { to: ['a@evil.example'], subject: 's', body: 'b' }, provenance: 'user' }, { role: 'hr_admin', runId: 't1' }, spy);
   assert.equal(calls, 0);
   assert.equal(r1.executed, false); assert.equal(r2.executed, false);
-  const denied = (await q.get("SELECT COUNT(*) n FROM audit_logs WHERE run_id='t1' AND decision='deny'")).n;
+  const denied = await db.count('audit_logs', { run_id: 't1', decision: 'deny' });
   assert.equal(denied, 2);
   await executeToolCall({ tool: 'search_documents', args: { query: 'x' }, provenance: 'user' }, { role: 'employee', runId: 't1' }, spy);
 });
@@ -58,7 +58,7 @@ test('end-to-end attack scenarios: injected/unauthorised/exfil actions are block
     assert.ok(run.denied > 0, `${id}: expected denied actions`);
     assert.equal(run.actions.filter((a) => a.executed && (a.tool === 'send_email' || a.tool === 'get_employee_records')).length, 0, `${id}: no sensitive action may execute`);
   }
-  assert.equal((await q.get('SELECT COUNT(*) n FROM outbox')).n, 0);
+  assert.equal(await db.count('outbox'), 0);
   const inj = await resolveScenario('indirect-injection');
   const run = await runAgent({ task: inj.task, role: 'employee', docIds: inj.docIds });
   assert.ok(run.evidence.some((e) => e.quarantined), 'poisoned chunk is quarantined');
