@@ -5,5 +5,5 @@ export const dynamic = 'force-dynamic';
 export const GET = handle(async (req) => {
   const u = new URL(req.url);
   const decision = ['allow', 'deny'].includes(u.searchParams.get('decision')) ? u.searchParams.get('decision') : null;
-  return json({ logs: listAudit({ limit: u.searchParams.get('limit'), decision }) });
+  return json({ logs: await listAudit({ limit: u.searchParams.get('limit'), decision }) });
 });

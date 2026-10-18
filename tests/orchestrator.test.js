@@ -3,7 +3,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ingestDocument } from '../lib/documents.js';
 import { scanDocument } from '../lib/orchestrator.js';
-import { getDb } from '../lib/db.js';
 import { usageSummary } from '../lib/budget.js';
 import { filler } from './setup.js';
 
@@ -65,7 +64,7 @@ test('no API client / disabled -> partially scanned, never clean', async () => {
 });
 
 test('daily budget exhaustion continues locally and reports partial', async () => {
-  const before = usageSummary().used;
+  const before = (await usageSummary()).used;
   process.env.GEMINI_DAILY_LIMIT = String(before + 1);
   const d = await doc(6);
   const client = fake(benign);
@@ -74,7 +73,7 @@ test('daily budget exhaustion continues locally and reports partial', async () =
   assert.equal(r.status, 'partial');
   assert.equal(r.stop_reason, 'budget_daily_limit_reached');
   assert.ok(r.batches.slice(1).every((b) => b.status === 'skipped'));
-  assert.equal(usageSummary().remaining, 0);
+  assert.equal((await usageSummary()).remaining, 0);
   process.env.GEMINI_DAILY_LIMIT = '20';
 });
 

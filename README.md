@@ -1,8 +1,8 @@
-# incheck — AI Agent Security (hackathon MVP)
+# incheck — AI Agent Security
 
 Scan documents for prompt injection / secrets / exfiltration, then watch an AI agent try to be tricked by them — and get stopped by a server-side policy gateway.
 
-**Stack:** Next.js 14 App Router · JavaScript only · Tailwind CSS · SQLite (`better-sqlite3`) · `@google/genai` · `pdf-parse`. No other runtime dependencies.
+**Stack:** Next.js 15 App Router · JavaScript only · Tailwind CSS · libSQL (`@libsql/client`: local SQLite file in dev, Turso in production) · `@google/genai` · `pdf-parse`.
 
 ## Setup
 
@@ -10,12 +10,12 @@ Scan documents for prompt injection / secrets / exfiltration, then watch an AI a
 npm install
 cp .env.example .env.local     # then add GEMINI_API_KEY (optional - everything works locally without it)
 npm run dev                    # http://localhost:3000
-npm test                       # 19 tests, no network or API key needed
+npm test                       # 27 tests, no network or API key needed
 ```
 
 Open the app → **Dashboard → Load sample documents** → **Documents** → scan → **Attack Playground → Run all**.
 
-Requires Node 18.18+ (tested on Node 22). The SQLite file lives in `data/` (git-ignored).
+Requires Node 20+ (tested on Node 22). Locally the database is a SQLite file in `data/` (git-ignored).
 
 ## What happens during a scan
 
@@ -49,12 +49,37 @@ The built-in agent planner is intentionally **over-compliant** (it obeys instruc
 
 ## Gemini cost protection
 
-`GEMINI_API_KEY` is read only server-side (`.env.local`). Daily cap (`GEMINI_DAILY_LIMIT`, default 20, UTC day) is enforced by reserving a slot *before* each call (failed calls count). Also: per-request input-token cap, output cap, cache, per-document batch cap, one scan per document at a time, usage table surfaced on the dashboard. The model is configurable via `GEMINI_MODEL` (default `gemini-2.5-flash`).
+`GEMINI_API_KEY` is read only server-side (`.env.local` / Vercel env vars). The daily cap (`GEMINI_DAILY_LIMIT`, default 20, UTC day) is enforced by reserving a slot *before* each call in a single atomic SQL statement, so concurrent serverless instances cannot overshoot it (failed calls count). Also: per-request input-token cap, output cap, cache, per-document batch cap, one scan per document at a time (DB-backed lock), usage table surfaced on the dashboard. The model is configurable via `GEMINI_MODEL` (default `gemini-2.5-flash`).
+
+## Deploying to Vercel
+
+SQLite files **cannot** persist on Vercel (read-only, per-instance filesystem), so production uses a hosted libSQL database.
+
+1. **Create a Turso database** (free tier is plenty): `turso db create incheck`, then `turso db show incheck --url` and `turso db tokens create incheck`. (Or add Turso from the Vercel Marketplace, which injects these variables for you.) Tables are created automatically on first request.
+2. **Import the repo in Vercel** (framework: Next.js, Node 20+). No build settings to change.
+3. **Set environment variables** (Project → Settings → Environment Variables):
+
+| Variable | Notes |
+|---|---|
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | **Required** for persistence. Without them the app runs on temporary `/tmp` storage and shows a warning banner. |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Optional; without a key every scan is `partial` (local detection only). |
+| `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD` | **Strongly recommended.** The app has no user accounts; anyone with the URL can use your Gemini budget and see the shared data. |
+| `GEMINI_DAILY_LIMIT` etc. | See `.env.example`. |
+
+4. Deploy, then open `/api/health` — it should return `"db":"ok","persistence":"turso"`.
+
+Production behaviour worth knowing:
+
+- **Function time limit:** the scan route is capped at 60 s. The orchestrator stops starting new Gemini requests after `SCAN_TIME_BUDGET_MS` (40 s) and reports `partial`; press **Scan** again and it resumes — finished batches come from the cache, so they cost nothing.
+- **Upload limit:** Vercel rejects bodies over 4.5 MB, so uploads are capped at 4 MB on Vercel regardless of `MAX_UPLOAD_MB`.
+- **Rate limits:** per-IP, stored in the database (uploads 20, scans 15, agent runs 40 per 10 minutes, etc.).
+- **Shared data:** there are no per-user accounts; all visitors share one workspace. Use Basic auth, or deploy one instance per team.
+- **Security headers** are set in `next.config.mjs`. Secrets never reach the browser; audit logs redact credentials.
 
 ## Layout
 
 ```
-lib/  config · db · documents · retrieval(BM25) · detection · budget · gemini · orchestrator · policy · tools · agent · scenarios · samples · audit · stats
+lib/  config · db(libSQL) · ratelimit(in http) · documents · retrieval(BM25) · detection · budget · gemini · orchestrator · policy · tools · agent · scenarios · samples · audit · stats
 app/api/…  documents, documents/[id]/scan, samples, agent/run, agent/tool, scenarios, stats, audit
 components/  Dashboard · DocumentsPanel · SandboxPanel · PlaygroundPanel · AuditPanel · AgentRunView
 samples/  7 test documents (clean, poisoned, credentials, training, ambiguous, 3.5k-word handbook, PDF)

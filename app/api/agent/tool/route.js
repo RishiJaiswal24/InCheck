@@ -1,11 +1,12 @@
 import { executeToolCall, ROLES } from '@/lib/policy';
-import { bad, handle, json, readJson } from '@/lib/http';
+import { bad, handle, json, rateLimit, readJson } from '@/lib/http';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const PROV = ['user', 'model', 'retrieved_content'];
 
 /** Manual tool tester: still goes through the same gateway (nothing here can skip policy). */
 export const POST = handle(async (req) => {
+  await rateLimit(req, 'tool', 80);
   const b = await readJson(req);
   if (typeof b.tool !== 'string') throw bad('tool is required');
   const role = b.role ?? 'employee', provenance = b.provenance ?? 'user';

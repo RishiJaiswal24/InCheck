@@ -11,6 +11,7 @@ export default function Dashboard({ tick, bump }) {
   const empty = s.documents === 0 && s.agentRuns === 0;
   return (
     <div className="space-y-5">
+      {s.persistence === 'ephemeral' && <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">Storage is temporary on this deployment (no TURSO_DATABASE_URL set). Data can disappear at any time. Connect a Turso database to persist scans and audit logs.</div>}
       {empty && (
         <Card title="Welcome to incheck"><p className="mb-3 text-sm text-slate-300">No data yet. Load the bundled sample documents (clean, poisoned, credentials, training material, a large handbook and a PDF), then scan them and run the attack playground.</p>
           <Btn onClick={async () => { await api('/api/samples', { method: 'POST' }); bump(); }}>Load sample documents</Btn></Card>)}

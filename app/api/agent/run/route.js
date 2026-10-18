@@ -1,10 +1,11 @@
 import { runAgent } from '@/lib/agent';
 import { ROLES } from '@/lib/policy';
-import { bad, handle, json, readJson } from '@/lib/http';
+import { bad, handle, json, rateLimit, readJson } from '@/lib/http';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export const POST = handle(async (req) => {
+  await rateLimit(req, 'agent', 40);
   const b = await readJson(req);
   if (typeof b.task !== 'string') throw bad('task is required');
   if (b.role !== undefined && !ROLES.includes(b.role)) throw bad(`role must be one of ${ROLES.join(', ')}`);

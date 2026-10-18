@@ -13,10 +13,10 @@ const TONE = {
   medium: 'bg-amber-500/15 text-amber-300 border-amber-500/40', low: 'bg-sky-500/15 text-sky-300 border-sky-500/40', info: 'bg-slate-500/15 text-slate-300 border-slate-500/40',
   threat_confirmed: 'bg-red-500/15 text-red-300 border-red-500/40', findings: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
   partial: 'bg-violet-500/15 text-violet-300 border-violet-500/40', clean: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
-  unscanned: 'bg-slate-500/15 text-slate-400 border-slate-600/40', allow: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40', deny: 'bg-red-500/15 text-red-300 border-red-500/40',
+  running: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40', unscanned: 'bg-slate-500/15 text-slate-400 border-slate-600/40', allow: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40', deny: 'bg-red-500/15 text-red-300 border-red-500/40',
   processed: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', cached: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40', skipped: 'bg-slate-600/30 text-slate-400 border-slate-600/40', failed: 'bg-red-500/20 text-red-300 border-red-500/40', pending: 'bg-slate-700/30 text-slate-400 border-slate-600/40',
 };
-export const STATUS_LABEL = { threat_confirmed: 'Threat confirmed', findings: 'Findings (fully scanned)', partial: 'Partially scanned', clean: 'Clean', unscanned: 'Not scanned' };
+export const STATUS_LABEL = { running: 'Scanning…', threat_confirmed: 'Threat confirmed', findings: 'Findings (fully scanned)', partial: 'Partially scanned', clean: 'Clean', unscanned: 'Not scanned' };
 
 export const Badge = ({ kind, children, className = '' }) => (
   <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-medium leading-none ${TONE[kind] || TONE.info} ${className}`}>{children ?? kind}</span>

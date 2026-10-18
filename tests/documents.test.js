@@ -25,7 +25,7 @@ test('chunking overlaps and keeps source references', () => {
 
 test('PDF extraction keeps page refs and local rules flag the injected page', async () => {
   const d = await ingestDocument({ name: 'memo.pdf', buffer: fs.readFileSync('samples/quarterly-security-memo.pdf') });
-  const chunks = getChunks(d.id);
+  const chunks = await getChunks(d.id);
   assert.equal(chunks[0].ref, 'p.1-2'); // single chunk spanning both pages keeps its page range
   const hit = chunks.flatMap((c) => detectChunk(c.text));
   assert.ok(hit.some((f) => f.category === 'prompt_injection'));
